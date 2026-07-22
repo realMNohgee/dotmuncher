@@ -143,7 +143,7 @@ function initGame() {
     x: 10 * CELL + CELL/2, y: 15 * CELL + CELL/2,
     dir: {x: 0, y: 0},
     nextDir: {x: 0, y: 0},
-    speed: 2.5,
+    speed: 1.8,
     mouthAngle: 0, mouthOpen: true, mouthTimer: 0
   };
 
@@ -189,7 +189,11 @@ window.addEventListener('resize', resize);
 resize();
 
 function isWall(col, row) {
-  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return true;
+  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) {
+    // Tunnel wrapping — allow passage through open ends
+    if (row === 9 || row === 19) return false;
+    return true;
+  }
   return maze[row][col] === 1;
 }
 
@@ -383,13 +387,13 @@ function playerMove() {
   player.row = Math.max(0, Math.min(ROWS - 1, player.row));
 
   // Tunnel wrapping at open ends
-  if (player.col <= 0 && (player.row === 9 || player.row === 16)) {
+  if (player.col <= 0 && (player.row === 9 || player.row === 19)) {
     if (player.dir.x < 0) {
       player.col = COLS - 1;
       player.x = player.col * CELL + CELL/2;
     }
   }
-  if (player.col >= COLS - 1 && (player.row === 9 || player.row === 16)) {
+  if (player.col >= COLS - 1 && (player.row === 9 || player.row === 19)) {
     if (player.dir.x > 0) {
       player.col = 0;
       player.x = player.col * CELL + CELL/2;
@@ -414,6 +418,7 @@ function playerMove() {
       powerMode = true;
       powerTimer = 300;
       ghostEatCombo = 0;
+      player.speed = 2.5; // Speed boost!
       for (const g of ghosts) {
         if (!g.eaten) { g.frightened = true; g.dir = getOppositeDir(g.dir); }
       }
@@ -668,6 +673,7 @@ function update() {
     if (powerTimer <= 0) {
       powerMode = false;
       ghostEatCombo = 0;
+      player.speed = 1.8 + (level - 1) * 0.15; // Reset to base + level bonus
       for (const g of ghosts) {
         g.frightened = false;
         g.eaten = false;
