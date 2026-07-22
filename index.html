@@ -305,9 +305,38 @@ function playerMove() {
   if (keys['ArrowLeft'] || keys['a'])  desiredDir = {x:-1, y:0};
   if (keys['ArrowRight'] || keys['d']) desiredDir = {x:1, y:0};
 
+  // If stopped and a direction is pressed, try to start moving
+  if (player.dir.x === 0 && player.dir.y === 0) {
+    if (desiredDir.x !== 0 || desiredDir.y !== 0) {
+      const dc = player.col + desiredDir.x;
+      const dr = player.row + desiredDir.y;
+      if (!isWall(dc, dr)) {
+        player.dir = {...desiredDir};
+      }
+    }
+  }
+
   // Move in current direction
   const prevX = player.x;
   const prevY = player.y;
+
+  // Stop before entering a wall — only if past tile center
+  const nextCol = player.col + player.dir.x;
+  const nextRow = player.row + player.dir.y;
+  if (isWall(nextCol, nextRow) && (player.dir.x !== 0 || player.dir.y !== 0)) {
+    const cx = player.col * CELL + CELL/2;
+    const cy = player.row * CELL + CELL/2;
+    const pastCenter = (player.dir.x > 0 && player.x >= cx) ||
+                       (player.dir.x < 0 && player.x <= cx) ||
+                       (player.dir.y > 0 && player.y >= cy) ||
+                       (player.dir.y < 0 && player.y <= cy);
+    if (pastCenter) {
+      player.x = cx;
+      player.y = cy;
+      player.dir = {x:0, y:0};
+    }
+  }
+
   player.x += player.dir.x * player.speed;
   player.y += player.dir.y * player.speed;
 
