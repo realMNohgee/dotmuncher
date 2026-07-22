@@ -210,8 +210,17 @@ function getOppositeDir(dir) {
 // Ghost AI: pick target tile
 function getGhostTarget(ghost, idx) {
   if (ghost.frightened) {
-    // Random scatter when frightened
-    return {col: Math.floor(Math.random() * COLS), row: Math.floor(Math.random() * ROWS)};
+    // Random scatter within maze bounds — use valid path tiles only
+    const validTiles = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (maze[r][c] === 0) validTiles.push({col: c, row: r});
+      }
+    }
+    if (validTiles.length > 0) {
+      return validTiles[Math.floor(Math.random() * validTiles.length)];
+    }
+    return {col: 10, row: 9};
   }
   if (ghost.eaten) {
     // Return to ghost house center
@@ -296,6 +305,12 @@ function ghostMove(ghost, idx) {
   // Move
   ghost.x += ghost.dir.x * speed;
   ghost.y += ghost.dir.y * speed;
+
+  // Keep ghosts in bounds
+  ghost.x = Math.max(CELL/2, Math.min(COLS * CELL - CELL/2, ghost.x));
+  ghost.y = Math.max(CELL/2, Math.min(ROWS * CELL - CELL/2, ghost.y));
+  ghost.col = Math.round((ghost.x - CELL/2) / CELL);
+  ghost.row = Math.round((ghost.y - CELL/2) / CELL);
 }
 
 // ---- PAC-MAN MOVEMENT ----
