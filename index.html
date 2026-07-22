@@ -294,57 +294,77 @@ function ghostMove(ghost, idx) {
   ghost.y += ghost.dir.y * speed;
 }
 
+// ---- PAC-MAN MOVEMENT ----
+// direction buffer: stores the last direction key pressed
+let desiredDir = {x: 0, y: 0};
+
 function playerMove() {
-  // Buffer desired direction from held key
-  if (keys['ArrowUp'] || keys['w']) player.nextDir = {x:0, y:-1};
-  else if (keys['ArrowDown'] || keys['s']) player.nextDir = {x:0, y:1};
-  else if (keys['ArrowLeft'] || keys['a']) player.nextDir = {x:-1, y:0};
-  else if (keys['ArrowRight'] || keys['d']) player.nextDir = {x:1, y:0};
+  // Update desired direction from keys (buffer the last pressed key)
+  if (keys['ArrowUp'] || keys['w'])    desiredDir = {x:0, y:-1};
+  if (keys['ArrowDown'] || keys['s'])  desiredDir = {x:0, y:1};
+  if (keys['ArrowLeft'] || keys['a'])  desiredDir = {x:-1, y:0};
+  if (keys['ArrowRight'] || keys['d']) desiredDir = {x:1, y:0};
 
-  const cx = player.col * CELL + CELL/2;
-  const cy = player.row * CELL + CELL/2;
-  const dx = player.x - cx;
-  const dy = player.y - cy;
+  // Move in current direction
+  const prevX = player.x;
+  const prevY = player.y;
+  player.x += player.dir.x * player.speed;
+  player.y += player.dir.y * player.speed;
 
-  // At tile center — commit direction changes
-  if (Math.abs(dx) < 3 && Math.abs(dy) < 3) {
-    // Snap to exact center
+  // Determine current tile
+  const newCol = Math.round((player.x - CELL/2) / CELL);
+  const newRow = Math.round((player.y - CELL/2) / CELL);
+
+  // Check if we crossed a tile boundary
+  const oldCol = Math.round((prevX - CELL/2) / CELL);
+  const oldRow = Math.round((prevY - CELL/2) / CELL);
+
+  if (newCol !== oldCol || newRow !== oldRow) {
+    // Snap to center of new tile
+    const cx = newCol * CELL + CELL/2;
+    const cy = newRow * CELL + CELL/2;
     player.x = cx;
     player.y = cy;
+    player.col = newCol;
+    player.row = newRow;
 
-    // Try to turn into nextDir (if different from current)
-    if (player.nextDir.x !== 0 || player.nextDir.y !== 0) {
-      const nc = player.col + player.nextDir.x;
-      const nr = player.row + player.nextDir.y;
-      if (!isWall(nc, nr)) {
-        player.dir = {...player.nextDir};
+    // Try desired direction first
+    if (desiredDir.x !== 0 || desiredDir.y !== 0) {
+      const dc = player.col + desiredDir.x;
+      const dr = player.row + desiredDir.y;
+      if (!isWall(dc, dr)) {
+        player.dir = {...desiredDir};
       }
     }
 
-    // If current dir is blocked by wall, stop
-    const nc2 = player.col + player.dir.x;
-    const nr2 = player.row + player.dir.y;
-    if (isWall(nc2, nr2)) {
+    // Check if current direction still works (else stop)
+    const nc = player.col + player.dir.x;
+    const nr = player.row + player.dir.y;
+    if (isWall(nc, nr)) {
       player.dir = {x:0, y:0};
     }
   }
 
-  // Move smoothly in current direction
-  player.x += player.dir.x * player.speed;
-  player.y += player.dir.y * player.speed;
-
-  // Update grid position from pixel position
+  // Update col/row from position (for dot eating)
   player.col = Math.round((player.x - CELL/2) / CELL);
   player.row = Math.round((player.y - CELL/2) / CELL);
 
-  // Tunnel wrapping
-  if (player.col < -1 && (player.row === 9 || player.row === 16)) {
-    player.col = COLS - 1;
-    player.x = player.col * CELL + CELL/2;
+  // Clamp to bounds
+  player.col = Math.max(0, Math.min(COLS - 1, player.col));
+  player.row = Math.max(0, Math.min(ROWS - 1, player.row));
+
+  // Tunnel wrapping at open ends
+  if (player.col <= 0 && (player.row === 9 || player.row === 16)) {
+    if (player.dir.x < 0) {
+      player.col = COLS - 1;
+      player.x = player.col * CELL + CELL/2;
+    }
   }
-  if (player.col >= COLS && (player.row === 9 || player.row === 16)) {
-    player.col = 0;
-    player.x = player.col * CELL + CELL/2;
+  if (player.col >= COLS - 1 && (player.row === 9 || player.row === 16)) {
+    if (player.dir.x > 0) {
+      player.col = 0;
+      player.x = player.col * CELL + CELL/2;
+    }
   }
 
   // Eat dots
