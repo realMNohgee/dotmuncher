@@ -112,6 +112,7 @@ let player, ghosts;
 let score, lives, level;
 let powerMode, powerTimer, ghostEatCombo;
 let gameOver, gamePaused;
+let fruit, fruitSpawned, fruitTimer;
 let animFrame;
 
 // Input
@@ -158,6 +159,9 @@ function initGame() {
   ghostEatCombo = 0;
   gameOver = false;
   gamePaused = false;
+  fruit = null;
+  fruitSpawned = false;
+  fruitTimer = 0;
 
   if (!score) score = 0;
   if (!lives) lives = 3;
@@ -291,11 +295,28 @@ function ghostMove(ghost, idx) {
 }
 
 function playerMove() {
-  // Try to change direction
+  // Queue next direction based on held key
   if (keys['ArrowUp'] || keys['w']) player.nextDir = {x:0, y:-1};
   else if (keys['ArrowDown'] || keys['s']) player.nextDir = {x:0, y:1};
   else if (keys['ArrowLeft'] || keys['a']) player.nextDir = {x:-1, y:0};
   else if (keys['ArrowRight'] || keys['d']) player.nextDir = {x:1, y:0};
+
+  // No current direction? Don't move
+  if (player.dir.x === 0 && player.dir.y === 0) {
+    // Try to start moving in nextDir
+    if (player.nextDir.x !== 0 || player.nextDir.y !== 0) {
+      const tc = player.col + player.nextDir.x;
+      const tr = player.row + player.nextDir.y;
+      if (!isWall(tc, tr)) {
+        player.dir = {...player.nextDir};
+        player.col = tc;
+        player.row = tr;
+        player.x = player.col * CELL + CELL/2;
+        player.y = player.row * CELL + CELL/2;
+      }
+    }
+    return; // No movement this frame
+  }
 
   const cx = player.col * CELL + CELL/2;
   const cy = player.row * CELL + CELL/2;
@@ -303,17 +324,16 @@ function playerMove() {
   const dy = player.y - cy;
   const distFromCenter = Math.hypot(dx, dy);
 
-  // Can we commit to next dir?
+  // Try to commit nextDir at tile center
   if (player.nextDir.x !== 0 || player.nextDir.y !== 0) {
-    // Check if we're close enough to center to turn
-    if (distFromCenter < player.speed + 1) {
+    if (distFromCenter < player.speed + 2) {
       const tc = player.col + player.nextDir.x;
       const tr = player.row + player.nextDir.y;
       if (!isWall(tc, tr)) {
-        player.dir = {...player.nextDir};
-        // Snap
+        // Snap to center and change direction
         player.x = cx;
         player.y = cy;
+        player.dir = {...player.nextDir};
         player.col += player.dir.x;
         player.row += player.dir.y;
       }
@@ -321,16 +341,43 @@ function playerMove() {
   }
 
   // Move in current direction
-  if (player.dir.x !== 0 || player.dir.y !== 0) {
-    player.x += player.dir.x * player.speed;
-    player.y += player.dir.y * player.speed;
+  const nx = player.x + player.dir.x * player.speed;
+  const ny = player.y + player.dir.y * player.speed;
+
+  // Wall collision check
+  const nc = Math.round((nx - CELL/2) / CELL);
+  const nr = Math.round((ny - CELL/2) / CELL);
+
+  if (player.dir.x !== 0) {
+    // Moving horizontally — check if next column is a wall
+    const checkCol = player.dir.x > 0 ? player.col + 1 : player.col - 1;
+    if (isWall(checkCol, player.row) && Math.abs(nx - cx) > CELL/2 - 3) {
+      player.x = cx; // Stop at center
+    } else {
+      player.x = nx;
+    }
+    player.y = cy; // Lock to row center
+  } else if (player.dir.y !== 0) {
+    const checkRow = player.dir.y > 0 ? player.row + 1 : player.row - 1;
+    if (isWall(player.col, checkRow) && Math.abs(ny - cy) > CELL/2 - 3) {
+      player.y = cy;
+    } else {
+      player.y = ny;
+    }
+    player.x = cx; // Lock to col center
   }
 
-  // Tunnel wrapping
-  if (player.x < -CELL/2) player.x = COLS * CELL + CELL/2;
-  if (player.x > COLS * CELL + CELL/2) player.x = -CELL/2;
+  // Tunnel wrapping (open ends at row 9 and row 16)
+  if (player.x < -CELL/2 && (player.row === 9 || player.row === 15 || player.row === 16)) {
+    player.x = COLS * CELL + CELL/2;
+    player.col = COLS - 1;
+  }
+  if (player.x > COLS * CELL + CELL/2 && (player.row === 9 || player.row === 15 || player.row === 16)) {
+    player.x = -CELL/2;
+    player.col = 0;
+  }
 
-  // Update grid col/row
+  // Update grid position
   player.col = Math.round((player.x - CELL/2) / CELL);
   player.row = Math.round((player.y - CELL/2) / CELL);
 
@@ -350,13 +397,19 @@ function playerMove() {
       pp.eaten = true;
       score += 50;
       powerMode = true;
-      powerTimer = 300; // ~5 seconds at 60fps
+      powerTimer = 300;
       ghostEatCombo = 0;
-      // Reverse ghosts
       for (const g of ghosts) {
         if (!g.eaten) { g.frightened = true; g.dir = getOppositeDir(g.dir); }
       }
     }
+  }
+
+  // Eat fruit
+  if (fruit && fruit.col === player.col && fruit.row === player.row) {
+    score += fruit.points;
+    fruitSpawned = false;
+    fruit = null;
   }
 
   updateHUD();
@@ -365,9 +418,8 @@ function playerMove() {
   const allDotsEaten = dots.every(d => d.eaten);
   if (allDotsEaten) {
     level++;
-    score += 100; // level bonus
+    score += 100;
     initGame();
-    // Increase ghost speed per level
     for (const g of ghosts) g.speed = 2.0 + (level - 1) * 0.3;
   }
 }
@@ -563,6 +615,24 @@ function draw() {
   drawMaze();
   drawDots();
   drawPowerPellets();
+  // Draw fruit
+  if (fruit) {
+    const x0 = PADDING, y0 = PADDING;
+    const fx = x0 + fruit.col * CELL + CELL/2;
+    const fy = y0 + fruit.row * CELL + CELL/2;
+    ctx.font = `${CELL - 6}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Pulsing glow
+    const glow = 0.5 + 0.5 * Math.sin(performance.now() / 400);
+    ctx.fillStyle = `rgba(255,255,200,${0.3 + glow * 0.4})`;
+    ctx.beginPath();
+    ctx.arc(fx, fy, CELL/2, 0, Math.PI * 2);
+    ctx.fill();
+    // Emoji
+    ctx.fillText(fruit.emoji, fx, fy);
+    ctx.textAlign = 'start';
+  }
   for (const g of ghosts) drawGhost(g);
   drawPlayer();
 }
@@ -587,6 +657,48 @@ function update() {
         g.frightened = false;
         g.eaten = false;
       }
+    }
+  }
+
+  // Fruit spawning — appears after 70+ dots eaten, spawns twice per level
+  const dotsEaten = dots.filter(d => d.eaten).length;
+  if (!fruit && !fruitSpawned && dotsEaten >= 70 && dotsEaten < 100) {
+    // Find a random empty tile
+    const emptyTiles = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (!isWall(c, r) && !(r >= 8 && r <= 10 && c >= 8 && c <= 11)) {
+          emptyTiles.push({col: c, row: r});
+        }
+      }
+    }
+    if (emptyTiles.length > 0) {
+      const tile = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+      const fruitTypes = [
+        {emoji: '🍒', points: 100},
+        {emoji: '🍓', points: 300},
+        {emoji: '🍊', points: 500},
+        {emoji: '🍎', points: 700},
+        {emoji: '🍌', points: 1000},
+        {emoji: '🔑', points: 5000},
+      ];
+      const ft = fruitTypes[Math.min(level - 1, 5)];
+      fruit = {col: tile.col, row: tile.row, points: ft.points, emoji: ft.emoji};
+      fruitTimer = 400; // ~6.5 seconds
+    }
+  }
+
+  // Second fruit spawn (after 170+ dots eaten)
+  if (!fruit && fruitSpawned && dotsEaten >= 170) {
+    fruitSpawned = false; // reset for second spawn
+  }
+
+  // Fruit timer
+  if (fruit) {
+    fruitTimer--;
+    if (fruitTimer <= 0) {
+      fruit = null;
+      fruitSpawned = true;
     }
   }
 
