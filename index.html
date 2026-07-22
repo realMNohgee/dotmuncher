@@ -148,10 +148,10 @@ function initGame() {
   };
 
   ghosts = [
-    { col: 9, row: 9, x: 9*CELL+CELL/2, y: 9*CELL+CELL/2, dir: {x:0,y:-1}, color: '#ff0000', type: 'chase',     scatter: {col:19,row:1},  speed: 2.0, frightened: false, eaten: false },
-    { col: 10,row: 9, x: 10*CELL+CELL/2,y: 9*CELL+CELL/2, dir: {x:0,y:-1}, color: '#ffb8ff', type: 'ambush',    scatter: {col:1,row:1},   speed: 2.0, frightened: false, eaten: false },
-    { col: 9, row: 10,x: 9*CELL+CELL/2, y: 10*CELL+CELL/2,dir: {x:0,y:1},  color: '#00ffff', type: 'patrol',    scatter: {col:19,row:21}, speed: 1.8, frightened: false, eaten: false },
-    { col: 10,row: 10,x: 10*CELL+CELL/2,y: 10*CELL+CELL/2,dir: {x:0,y:1},  color: '#ffb852', type: 'wander',    scatter: {col:1,row:21},  speed: 1.8, frightened: false, eaten: false },
+    { col: 9, row: 9, x: 9*CELL+CELL/2, y: 9*CELL+CELL/2, dir: {x:0,y:-1}, color: '#ff0000', type: 'chase',     scatter: {col:19,row:1},  speed: 2.0, frightened: false, eaten: false, respawnTimer: 0 },
+    { col: 10,row: 9, x: 10*CELL+CELL/2,y: 9*CELL+CELL/2, dir: {x:0,y:-1}, color: '#ffb8ff', type: 'ambush',    scatter: {col:1,row:1},   speed: 2.0, frightened: false, eaten: false, respawnTimer: 0 },
+    { col: 9, row: 10,x: 9*CELL+CELL/2, y: 10*CELL+CELL/2,dir: {x:0,y:1},  color: '#00ffff', type: 'patrol',    scatter: {col:19,row:21}, speed: 1.8, frightened: false, eaten: false, respawnTimer: 0 },
+    { col: 10,row: 10,x: 10*CELL+CELL/2,y: 10*CELL+CELL/2,dir: {x:0,y:1},  color: '#ffb852', type: 'wander',    scatter: {col:1,row:21},  speed: 1.8, frightened: false, eaten: false, respawnTimer: 0 },
   ];
 
   powerMode = false;
@@ -255,7 +255,7 @@ function getGhostTarget(ghost, idx) {
 }
 
 function ghostMove(ghost, idx) {
-  const speed = ghost.frightened ? ghost.speed * 0.6 : (ghost.eaten ? ghost.speed * 1.5 : ghost.speed);
+  const speed = ghost.frightened ? ghost.speed * 0.45 : (ghost.eaten ? ghost.speed * 1.5 : ghost.speed);
   const target = getGhostTarget(ghost, idx);
 
   // Snap to grid center
@@ -738,10 +738,22 @@ function update() {
     }
   }
 
-  // Check if eaten ghosts reached home
+  // Check if eaten ghosts reached home — start respawn timer
   for (const g of ghosts) {
-    if (g.eaten && g.row === 9 && (g.col === 9 || g.col === 10)) {
-      g.eaten = false;
+    if (g.eaten && g.row === 9 && (g.col === 9 || g.col === 10) && g.respawnTimer === 0) {
+      g.respawnTimer = 300; // 5 second timeout
+    }
+    if (g.respawnTimer > 0) {
+      g.respawnTimer--;
+      if (g.respawnTimer <= 0) {
+        g.eaten = false;
+        g.frightened = false;
+        // Pop ghost back up to start position inside house
+        g.col = 10; g.row = 9;
+        g.x = g.col * CELL + CELL/2;
+        g.y = g.row * CELL + CELL/2;
+        g.dir = {x:0, y:-1};
+      }
     }
   }
 }
